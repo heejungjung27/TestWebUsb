@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebUSB 프린터 테스트</title>
+    <title>WebUSB 프린터 테스트 (ESC/POS)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; }
@@ -12,9 +12,9 @@
 <body class="bg-gray-100 min-h-screen p-6">
 
     <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
-        <div class="bg-blue-600 p-4">
-            <h1 class="text-xl font-bold text-white">WebUSB 프린터 연결 및 테스트</h1>
-            <p class="text-blue-100 text-sm mt-1">ChromeOS Flex / Chrome Browser</p>
+        <div class="bg-indigo-600 p-4">
+            <h1 class="text-xl font-bold text-white">WebUSB 프린터 디버깅 도구</h1>
+            <p class="text-indigo-100 text-sm mt-1">ChromeOS / Chrome Browser (ESC/POS 지원)</p>
         </div>
 
         <div class="p-6 space-y-6">
@@ -22,12 +22,8 @@
             <!-- Connection Section -->
             <div class="border-b pb-6">
                 <h2 class="text-lg font-semibold text-gray-800 mb-2">1. 장치 연결</h2>
-                <p class="text-gray-600 text-sm mb-4">
-                    '장치 찾기'를 클릭하고 목록에서 USB 프린터를 선택하세요. <br>
-                    <span class="text-red-500 text-xs">* ChromeOS가 이미 드라이버를 점유 중이면 연결에 실패할 수 있습니다.</span>
-                </p>
                 <div class="flex items-center gap-4">
-                    <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition">
+                    <button id="connectBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition shadow-sm">
                         장치 찾기 및 연결
                     </button>
                     <span id="deviceStatus" class="text-gray-500 font-mono text-sm">연결되지 않음</span>
@@ -36,22 +32,47 @@
 
             <!-- Print Section -->
             <div class="border-b pb-6">
-                <h2 class="text-lg font-semibold text-gray-800 mb-2">2. 텍스트 전송 (Raw Data)</h2>
-                <p class="text-gray-600 text-sm mb-2">프린터로 보낼 텍스트를 입력하세요. (기본값은 ESC/POS 초기화 명령 포함)</p>
+                <h2 class="text-lg font-semibold text-gray-800 mb-2">2. 데이터 전송</h2>
+                <p class="text-gray-600 text-sm mb-3">
+                    전송 성공 후에도 출력이 안 된다면 <b>초기화</b>와 <b>피드(줄바꿈)</b> 옵션을 켜보세요.
+                </p>
                 
-                <textarea id="printContent" rows="3" class="w-full border rounded p-2 font-mono text-sm bg-gray-50 mb-3" placeholder="출력할 내용을 입력하세요...">Hello, WebUSB!
-Test Print from ChromeOS Flex.
---------------------------------
-</textarea>
+                <textarea id="printContent" rows="3" class="w-full border border-gray-300 rounded p-2 font-mono text-sm bg-gray-50 mb-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="출력할 내용을 입력하세요...">Hello, WebUSB!
+Test Print Successful.
+--------------------------------</textarea>
                 
-                <button id="printBtn" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition">
-                    프린트로 전송하기
-                </button>
+                <!-- Command Options -->
+                <div class="flex flex-wrap gap-4 mb-4 bg-gray-50 p-3 rounded border border-gray-200">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="cmdInit" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span class="text-sm text-gray-700">초기화 (ESC @)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="cmdFeed" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span class="text-sm text-gray-700">5줄 피드 (Feed)</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="cmdCut" class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span class="text-sm text-gray-700">용지 커팅 (Cut)</span>
+                    </label>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="printBtn" disabled class="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition shadow-sm">
+                        텍스트 전송
+                    </button>
+                    <button id="testHexBtn" disabled class="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition shadow-sm text-sm">
+                        테스트 HEX 전송
+                    </button>
+                </div>
             </div>
 
             <!-- Log Section -->
-            <div class="bg-gray-900 rounded p-4 h-64 overflow-y-auto font-mono text-xs">
-                <div class="text-gray-400 border-b border-gray-700 pb-2 mb-2">로그 콘솔</div>
+            <div class="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs shadow-inner">
+                <div class="flex justify-between items-center border-b border-gray-700 pb-2 mb-2">
+                    <span class="text-gray-400">시스템 로그</span>
+                    <button onclick="document.getElementById('logs').innerHTML=''" class="text-gray-500 hover:text-white text-xs">지우기</button>
+                </div>
                 <div id="logs" class="space-y-1"></div>
             </div>
         </div>
@@ -60,21 +81,28 @@ Test Print from ChromeOS Flex.
     <script>
         let device = null;
         let endpointNumber = null;
-        let interfaceNumber = 0; // 보통 프린터는 인터페이스 0번을 사용
+        let interfaceNumber = 0;
 
         const connectBtn = document.getElementById('connectBtn');
         const printBtn = document.getElementById('printBtn');
+        const testHexBtn = document.getElementById('testHexBtn');
         const statusSpan = document.getElementById('deviceStatus');
         const printContent = document.getElementById('printContent');
         const logContainer = document.getElementById('logs');
 
+        // Options
+        const cmdInit = document.getElementById('cmdInit');
+        const cmdFeed = document.getElementById('cmdFeed');
+        const cmdCut = document.getElementById('cmdCut');
+
         function log(msg, type = 'info') {
             const div = document.createElement('div');
-            const time = new Date().toLocaleTimeString();
+            const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
             div.textContent = `[${time}] ${msg}`;
             
             if (type === 'error') div.className = 'text-red-400';
-            else if (type === 'success') div.className = 'text-green-400';
+            else if (type === 'success') div.className = 'text-green-400 font-semibold';
+            else if (type === 'tx') div.className = 'text-blue-300';
             else div.className = 'text-gray-300';
             
             logContainer.appendChild(div);
@@ -83,107 +111,130 @@ Test Print from ChromeOS Flex.
 
         connectBtn.addEventListener('click', async () => {
             try {
-                // 1. 장치 요청 (필터를 비워서 모든 장치를 보여줌)
                 log("장치 검색 중...");
                 device = await navigator.usb.requestDevice({ filters: [] });
                 
                 log(`장치 선택됨: ${device.productName} (VID:${device.vendorId}, PID:${device.productId})`, 'success');
-                statusSpan.textContent = device.productName || "Unknown Device";
-                statusSpan.className = "text-green-600 font-bold font-mono text-sm";
+                statusSpan.textContent = device.productName || `Unknown (VID:${device.vendorId})`;
+                statusSpan.className = "text-indigo-600 font-bold font-mono text-sm";
 
-                // 2. 장치 열기
                 log("장치 여는 중 (Opening)...");
                 await device.open();
                 
-                // 3. 설정 선택 (Configuration 1 선택)
                 if (device.configuration === null) {
-                    log("Configuration 선택 중...");
+                    log("Configuration #1 선택 중...");
                     await device.selectConfiguration(1);
                 }
 
-                // 4. 인터페이스 및 엔드포인트 찾기
-                // 프린터 인터페이스 클래스는 보통 7 (Printer) 입니다.
-                // Bulk Out 엔드포인트를 찾아야 합니다.
+                // 엔드포인트 탐색
                 let targetInterface = null;
-                
-                // 장치의 모든 설정을 뒤져서 적절한 인터페이스와 엔드포인트를 찾습니다.
                 const config = device.configuration;
                 
-                log("적절한 엔드포인트 탐색 중...");
-                
+                // 1. 프린터 클래스(7) 우선 탐색
+                // 2. 없으면 Bulk Out이 있는 아무 인터페이스나 탐색
                 for (const iface of config.interfaces) {
                     const alternate = iface.alternates[0];
-                    // 프린터 클래스(7)이거나, 벤더 지정(255)인 경우가 많음
-                    // 여기서는 단순히 'out' 방향의 'bulk' 타입 엔드포인트를 가진 인터페이스를 찾습니다.
                     const outEndpoint = alternate.endpoints.find(e => e.direction === "out" && e.type === "bulk");
                     
                     if (outEndpoint) {
-                        targetInterface = iface;
-                        endpointNumber = outEndpoint.endpointNumber;
-                        interfaceNumber = iface.interfaceNumber;
-                        log(`인터페이스 #${interfaceNumber}에서 Bulk Out 엔드포인트 #${endpointNumber} 발견`, 'success');
-                        break;
+                        // 프린터 클래스 우선순위
+                        if (alternate.interfaceClass === 7) {
+                            targetInterface = iface;
+                            endpointNumber = outEndpoint.endpointNumber;
+                            interfaceNumber = iface.interfaceNumber;
+                            break; 
+                        }
+                        // 백업용
+                        if (!targetInterface) {
+                            targetInterface = iface;
+                            endpointNumber = outEndpoint.endpointNumber;
+                            interfaceNumber = iface.interfaceNumber;
+                        }
                     }
                 }
 
                 if (endpointNumber === null) {
-                    throw new Error("출력 가능한 엔드포인트를 찾을 수 없습니다.");
+                    throw new Error("출력 가능한 Bulk Out 엔드포인트를 찾을 수 없습니다.");
                 }
 
-                // 5. 인터페이스 점유 (Claim Interface) - 여기가 가장 실패하기 쉬운 단계
+                log(`인터페이스 #${interfaceNumber}, 엔드포인트 #${endpointNumber} 발견`, 'success');
+
                 log(`인터페이스 #${interfaceNumber} 점유 시도...`);
                 try {
                     await device.claimInterface(interfaceNumber);
-                    log("인터페이스 점유 성공!", 'success');
+                    log("인터페이스 점유 성공! 이제 전송 가능합니다.", 'success');
                     printBtn.disabled = false;
+                    testHexBtn.disabled = false;
                 } catch (claimError) {
-                    console.error(claimError);
-                    throw new Error(`인터페이스 점유 실패. OS가 드라이버를 사용 중일 수 있습니다.\n에러: ${claimError.message}`);
+                    throw new Error(`인터페이스 점유 실패. (이미 OS가 사용 중일 수 있음)\n${claimError.message}`);
                 }
 
             } catch (error) {
                 log(error.message, 'error');
-                device = null;
                 printBtn.disabled = true;
-                statusSpan.textContent = "연결 실패";
-                statusSpan.className = "text-red-500 font-mono text-sm";
+                testHexBtn.disabled = true;
             }
         });
 
-        printBtn.addEventListener('click', async () => {
+        // 실제 데이터 전송 함수
+        async function sendToPrinter(dataBuffer) {
             if (!device) return;
-
             try {
-                const text = printContent.value;
-                const encoder = new TextEncoder();
-                
-                // 텍스트 인코딩 (UTF-8 -> Uint8Array)
-                // 영수증 프린터의 경우 한글은 EUC-KR로 보내야 할 수도 있지만, 테스트를 위해 기본 UTF-8 전송
-                // 대부분의 프린터는 초기화 명령이 필요할 수 있습니다.
-                // ESC @ (초기화) = 0x1B, 0x40
-                
-                const commands = [];
-                // 간단한 초기화 커맨드 (필요시 주석 해제)
-                // commands.push(0x1B, 0x40); 
-                
-                const data = encoder.encode(text + '\n\n');
-                
-                // 데이터를 하나의 배열로 합치기
-                const buffer = new Uint8Array([...commands, ...data]);
-
-                log(`데이터 전송 중 (${buffer.byteLength} bytes)...`);
-                
-                // 전송!
-                const result = await device.transferOut(endpointNumber, buffer);
-                
-                log(`전송 완료! Status: ${result.status}`, 'success');
-
+                log(`데이터 전송 중 (${dataBuffer.byteLength} bytes)...`, 'tx');
+                const result = await device.transferOut(endpointNumber, dataBuffer);
+                log(`전송 결과: ${result.status} (bytes written: ${result.bytesWritten})`, 'success');
             } catch (error) {
                 log(`전송 실패: ${error.message}`, 'error');
             }
+        }
+
+        printBtn.addEventListener('click', async () => {
+            const text = printContent.value;
+            const encoder = new TextEncoder();
+            
+            // 1. 커맨드 버퍼 구성
+            let finalBuffer = [];
+
+            // [INIT] ESC @ (Initialize Printer)
+            if (cmdInit.checked) {
+                finalBuffer.push(0x1B, 0x40);
+            }
+
+            // [TEXT] 본문 텍스트
+            const textBytes = encoder.encode(text);
+            textBytes.forEach(b => finalBuffer.push(b));
+            
+            // 텍스트 끝에 기본 줄바꿈 하나 추가 (안전장치)
+            if (!text.endsWith('\n')) {
+                 finalBuffer.push(0x0A);
+            }
+
+            // [FEED] 줄바꿈 5번
+            if (cmdFeed.checked) {
+                // ESC d <n> (Print and feed n lines) - 일부 프린터 호환
+                // 안전하게 그냥 LF(\n)를 5번 보냄
+                finalBuffer.push(0x0A, 0x0A, 0x0A, 0x0A, 0x0A);
+            }
+
+            // [CUT] GS V 66 0 (Feeds paper & cuts) - 범용적인 ESC/POS 커팅 명령
+            if (cmdCut.checked) {
+                // GS V B 0 (Hex: 1D 56 42 00) -> Function B, No feed
+                // GS V A 0 (Hex: 1D 56 41 00) -> Function A (Feed & Cut)
+                finalBuffer.push(0x1D, 0x56, 0x41, 0x00);
+            }
+
+            const data = new Uint8Array(finalBuffer);
+            await sendToPrinter(data);
         });
-        
-        // 페이지 닫을 때 리소스 해제
+
+        // HEX 테스트 버튼 (혹시 텍스트가 안 될 때 순수 바이너리 테스트용)
+        testHexBtn.addEventListener('click', async () => {
+             // "Hello" + LF
+            const sample = new Uint8Array([0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x0A, 0x0A, 0x0A]);
+            log("간단한 HEX 데이터('Hello' + LF) 전송 시도...", 'tx');
+            await sendToPrinter(sample);
+        });
+
         window.addEventListener('beforeunload', async () => {
             if (device && device.opened) {
                 await device.close();
