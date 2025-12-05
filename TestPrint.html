@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebUSB 프린터 테스트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+
+    <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+        <div class="bg-blue-600 p-4">
+            <h1 class="text-xl font-bold text-white">WebUSB 프린터 연결 및 테스트</h1>
+            <p class="text-blue-100 text-sm mt-1">ChromeOS Flex / Chrome Browser</p>
+        </div>
+
+        <div class="p-6 space-y-6">
+            
+            <!-- Connection Section -->
+            <div class="border-b pb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-2">1. 장치 연결</h2>
+                <p class="text-gray-600 text-sm mb-4">
+                    '장치 찾기'를 클릭하고 목록에서 USB 프린터를 선택하세요. <br>
+                    <span class="text-red-500 text-xs">* ChromeOS가 이미 드라이버를 점유 중이면 연결에 실패할 수 있습니다.</span>
+                </p>
+                <div class="flex items-center gap-4">
+                    <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition">
+                        장치 찾기 및 연결
+                    </button>
+                    <span id="deviceStatus" class="text-gray-500 font-mono text-sm">연결되지 않음</span>
+                </div>
+            </div>
+
+            <!-- Print Section -->
+            <div class="border-b pb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-2">2. 텍스트 전송 (Raw Data)</h2>
+                <p class="text-gray-600 text-sm mb-2">프린터로 보낼 텍스트를 입력하세요. (기본값은 ESC/POS 초기화 명령 포함)</p>
+                
+                <textarea id="printContent" rows="3" class="w-full border rounded p-2 font-mono text-sm bg-gray-50 mb-3" placeholder="출력할 내용을 입력하세요...">Hello, WebUSB!
+Test Print from ChromeOS Flex.
+--------------------------------
+</textarea>
+                
+                <button id="printBtn" disabled class="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded transition">
+                    프린트로 전송하기
+                </button>
+            </div>
+
+            <!-- Log Section -->
+            <div class="bg-gray-900 rounded p-4 h-64 overflow-y-auto font-mono text-xs">
+                <div class="text-gray-400 border-b border-gray-700 pb-2 mb-2">로그 콘솔</div>
+                <div id="logs" class="space-y-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let device = null;
+        let endpointNumber = null;
+        let interfaceNumber = 0; // 보통 프린터는 인터페이스 0번을 사용
+
+        const connectBtn = document.getElementById('connectBtn');
+        const printBtn = document.getElementById('printBtn');
+        const statusSpan = document.getElementById('deviceStatus');
+        const printContent = document.getElementById('printContent');
+        const logContainer = document.getElementById('logs');
+
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            div.textContent = `[${time}] ${msg}`;
+            
+            if (type === 'error') div.className = 'text-red-400';
+            else if (type === 'success') div.className = 'text-green-400';
+            else div.className = 'text-gray-300';
+            
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                // 1. 장치 요청 (필터를 비워서 모든 장치를 보여줌)
+                log("장치 검색 중...");
+                device = await navigator.usb.requestDevice({ filters: [] });
+                
+                log(`장치 선택됨: ${device.productName} (VID:${device.vendorId}, PID:${device.productId})`, 'success');
+                statusSpan.textContent = device.productName || "Unknown Device";
+                statusSpan.className = "text-green-600 font-bold font-mono text-sm";
+
+                // 2. 장치 열기
+                log("장치 여는 중 (Opening)...");
+                await device.open();
+                
+                // 3. 설정 선택 (Configuration 1 선택)
+                if (device.configuration === null) {
+                    log("Configuration 선택 중...");
+                    await device.selectConfiguration(1);
+                }
+
+                // 4. 인터페이스 및 엔드포인트 찾기
+                // 프린터 인터페이스 클래스는 보통 7 (Printer) 입니다.
+                // Bulk Out 엔드포인트를 찾아야 합니다.
+                let targetInterface = null;
+                
+                // 장치의 모든 설정을 뒤져서 적절한 인터페이스와 엔드포인트를 찾습니다.
+                const config = device.configuration;
+                
+                log("적절한 엔드포인트 탐색 중...");
+                
+                for (const iface of config.interfaces) {
+                    const alternate = iface.alternates[0];
+                    // 프린터 클래스(7)이거나, 벤더 지정(255)인 경우가 많음
+                    // 여기서는 단순히 'out' 방향의 'bulk' 타입 엔드포인트를 가진 인터페이스를 찾습니다.
+                    const outEndpoint = alternate.endpoints.find(e => e.direction === "out" && e.type === "bulk");
+                    
+                    if (outEndpoint) {
+                        targetInterface = iface;
+                        endpointNumber = outEndpoint.endpointNumber;
+                        interfaceNumber = iface.interfaceNumber;
+                        log(`인터페이스 #${interfaceNumber}에서 Bulk Out 엔드포인트 #${endpointNumber} 발견`, 'success');
+                        break;
+                    }
+                }
+
+                if (endpointNumber === null) {
+                    throw new Error("출력 가능한 엔드포인트를 찾을 수 없습니다.");
+                }
+
+                // 5. 인터페이스 점유 (Claim Interface) - 여기가 가장 실패하기 쉬운 단계
+                log(`인터페이스 #${interfaceNumber} 점유 시도...`);
+                try {
+                    await device.claimInterface(interfaceNumber);
+                    log("인터페이스 점유 성공!", 'success');
+                    printBtn.disabled = false;
+                } catch (claimError) {
+                    console.error(claimError);
+                    throw new Error(`인터페이스 점유 실패. OS가 드라이버를 사용 중일 수 있습니다.\n에러: ${claimError.message}`);
+                }
+
+            } catch (error) {
+                log(error.message, 'error');
+                device = null;
+                printBtn.disabled = true;
+                statusSpan.textContent = "연결 실패";
+                statusSpan.className = "text-red-500 font-mono text-sm";
+            }
+        });
+
+        printBtn.addEventListener('click', async () => {
+            if (!device) return;
+
+            try {
+                const text = printContent.value;
+                const encoder = new TextEncoder();
+                
+                // 텍스트 인코딩 (UTF-8 -> Uint8Array)
+                // 영수증 프린터의 경우 한글은 EUC-KR로 보내야 할 수도 있지만, 테스트를 위해 기본 UTF-8 전송
+                // 대부분의 프린터는 초기화 명령이 필요할 수 있습니다.
+                // ESC @ (초기화) = 0x1B, 0x40
+                
+                const commands = [];
+                // 간단한 초기화 커맨드 (필요시 주석 해제)
+                // commands.push(0x1B, 0x40); 
+                
+                const data = encoder.encode(text + '\n\n');
+                
+                // 데이터를 하나의 배열로 합치기
+                const buffer = new Uint8Array([...commands, ...data]);
+
+                log(`데이터 전송 중 (${buffer.byteLength} bytes)...`);
+                
+                // 전송!
+                const result = await device.transferOut(endpointNumber, buffer);
+                
+                log(`전송 완료! Status: ${result.status}`, 'success');
+
+            } catch (error) {
+                log(`전송 실패: ${error.message}`, 'error');
+            }
+        });
+        
+        // 페이지 닫을 때 리소스 해제
+        window.addEventListener('beforeunload', async () => {
+            if (device && device.opened) {
+                await device.close();
+            }
+        });
+    </script>
+</body>
+</html>
